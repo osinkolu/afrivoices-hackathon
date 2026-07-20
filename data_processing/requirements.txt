@@ -1,0 +1,10 @@
+huggingface_hub
+pyarrow
+soundfile
+librosa
+kagglehub
+polars
+datasets
+jiwer
+pydub
+ffmpeg-python

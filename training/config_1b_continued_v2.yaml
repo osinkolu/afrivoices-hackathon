@@ -1,0 +1,62 @@
+model:
+  path: "/root/checkpoints/continued/step_2000/sdp_00.pt"  # warm-start from our best
+  family: "wav2vec2_asr"                                    # confirmed checkpoint so far
+  arch: "1b_v2"                                             # (step_2000: mojibake-fixed,
+  # `name` is set purely to satisfy the recipe's own prepare_model() check    # ~21% lower dev WER
+  # (it requires config.model.name to be non-empty to take the               # than step_8000)
+  # "training_from_pretrained_model" branch) -- fairseq2's actual model
+  # loader prioritizes `path` over `name` whenever both are set, so this
+  # does NOT change which weights actually load; verified against
+  # fairseq2/recipe/internal/model.py's bootstrap(): `if section.path is not
+  # None: ... return self._load_custom_model()` runs before `name` is ever
+  # consulted.
+  name: "omniASR_CTC_1B_v2"
+tokenizer:  { name: "omniASR_tokenizer_written_v2" }
+
+dataset:
+  name: "afrivoices_asr"
+  train_split: "train"
+  valid_split: "dev"
+  storage_mode: "MIXTURE_PARQUET"
+  task_mode: "ASR"
+  mixture_parquet_storage_config:
+    dataset_summary_path: "/root/data/afrivoices_processed/language_distribution_0.tsv"
+    beta_corpus: 0.5
+    beta_language: 0.5        # sqrt temperature: upsample mas/kln relative to swa
+    fragment_loading: { cache: True }
+  asr_task_config:
+    min_audio_len: 32_000      # 2s at 16kHz
+    max_audio_len: 960_000     # 60s at 16kHz
+    max_num_elements: 1_500_000  # batch size in audio samples; A40 has 46GB, plenty for 1B
+    normalize_audio: true
+    example_shuffle_window: 10_000
+    batch_shuffle_window: 1000
+
+optimizer: { config: { lr: 1.0e-05 } }
+
+trainer:
+  freeze_encoder_for_n_steps: 0
+  mixed_precision: { dtype: "torch.bfloat16" }
+  grad_accumulation: { num_batches: 8 }
+  activation_checkpointing: { mode: "layerwise" }
+  max_grad_norm: 10.0
+
+regime:
+  # A substantially longer fresh anneal than the first fix-adaptation run
+  # (2_000 steps): that run confirmed the fix works (21% lower dev WER) but
+  # was deliberately short. This run spends more of the remaining GPU budget
+  # on genuinely more training signal/generalization, still bounded to a
+  # realistic num_steps so the tri-stage LR schedule fully anneals within it
+  # (the same reason the original 8_000 -- and the first continuation's
+  # 2_000 -- were kept realistic rather than inflated).
+  num_steps: 6_000
+  validate_every_n_steps: 500  # must be a multiple of publish_metrics_every_n_steps (100)
+  checkpoint_every_n_steps: 500
+  save_model_only: true
+  keep_best_n_checkpoints: 3
+  score_metric: "wer"
+
+common:
+  metric_recorders:
+    tensorboard: { enabled: true }
+    wandb: { enabled: true, entity: null, project: "afrivoices-asr", run_name: "ctc1b-mojibake-fix-6000steps" }
