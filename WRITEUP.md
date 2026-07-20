@@ -2,7 +2,7 @@
 
 ## Background
 
-I'm Olufemi Victor, a student at Carnegie Mellon University Africa in Kigali, Rwanda, originally from Nigeria. This was a solo entry, and I set myself a constraint on top of the competition's own rules: build the entire thing (data pipeline, training infrastructure across three different cloud providers, debugging, evaluation, error analysis) through natural-language direction to an AI coding agent (Claude Code), and never write or edit a line of code by hand myself.
+I'm Victor, a student at Carnegie Mellon University Africa in Kigali. I joined less than a week before the competition closed, solo, and set myself a constraint on top of the competition's own rules: build the entire thing (data pipeline, training infrastructure across three different cloud providers, debugging, evaluation, error analysis) through natural-language direction to an AI coding agent (Claude Code), and never write or edit a line of code by hand myself.
 
 Final result: **0.47017** mean WER, 10th place.
 
@@ -44,11 +44,11 @@ Lesson: when you patch a bug, check *every* place the corrupted artifact could s
 
 I ran training in several segments rather than one continuous shot (warm-starting from a checkpoint each time meant restarting the tri-stage LR schedule, a training-recipe constraint of only saving model weights, not optimizer/scheduler state, between checkpoints). The pattern was stark and consistent:
 
-| Approach | Steps | Relative WER change |
-|---|---|---|
-| Mojibake fix, fresh 2,000-step anneal | 2,000 | **-21%** |
-| Same anneal type, tripled to 6,000 steps | 6,000 | -2.3% |
-| One long continuous 24,000-step anneal | 24,000 | -6.5% (vs. the 6,000-step checkpoint) |
+| Approach                                 | Steps  | Relative WER change                   |
+| ---------------------------------------- | ------ | ------------------------------------- |
+| Mojibake fix, fresh 2,000-step anneal    | 2,000  | **-21%**                        |
+| Same anneal type, tripled to 6,000 steps | 6,000  | -2.3%                                 |
+| One long continuous 24,000-step anneal   | 24,000 | -6.5% (vs. the 6,000-step checkpoint) |
 
 Going from 2,000 to 6,000 steps within the *same* short-restart pattern gave almost nothing. Switching to one long continuous cycle (warmup, hold, decay, uninterrupted) gave a real, repeatable further gain. My read: every restart's warmup phase partially undoes the low-LR convergence the previous cycle had just achieved. If you're warm-starting repeatedly, minimize how many times you do it, not just how many total steps you accumulate.
 
@@ -72,13 +72,13 @@ With the leaderboard closed and no test-set references to reverse-engineer again
 **Annotation-tag artifacts.** Reference transcriptions contain literal transcriber tags like `[cs]` (code-switch boundary) and `[pause]` embedded as text. A correct model should never produce these (they're not spoken words), but WER counts their absence as an error every time. I measured the actual impact by scoring the same predictions against both the raw and tag-stripped reference:
 
 | Language | Tag prevalence in dev | WER inflation from tags |
-|---|---|---|
-| Maasai | 12.8% of rows | 0.88 percentage points |
-| Kalenjin | 10.4% of rows | 0.23 pp |
-| Swahili | 4.3% of rows | 0.42 pp |
-| Luo | 5.2% of rows | 0.09 pp |
-| Kikuyu | 1.4% of rows | 0.02 pp |
-| Somali | 1.4% of rows | 0.01 pp |
+| -------- | --------------------- | ----------------------- |
+| Maasai   | 12.8% of rows         | 0.88 percentage points  |
+| Kalenjin | 10.4% of rows         | 0.23 pp                 |
+| Swahili  | 4.3% of rows          | 0.42 pp                 |
+| Luo      | 5.2% of rows          | 0.09 pp                 |
+| Kikuyu   | 1.4% of rows          | 0.02 pp                 |
+| Somali   | 1.4% of rows          | 0.01 pp                 |
 
 Real, but modest: nowhere close to explaining the gap to the leaderboard leader on its own.
 
