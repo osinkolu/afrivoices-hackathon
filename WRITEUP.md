@@ -2,9 +2,7 @@
 
 ## Background
 
-I'm Olufemi Victor, a student at Carnegie Mellon University Africa in Kigali, Rwanda, originally from Nigeria. This was a solo entry, my first time entering a speech competition, and I set myself a constraint on top of the competition's own rules: build the entire thing (data pipeline, training infrastructure across three different cloud providers, debugging, evaluation, error analysis) through natural-language direction to an AI coding agent (Claude Code), and never write or edit a line of code by hand myself.
-
-I want to be upfront about why that framing matters here and why it doesn't: it's not the point of this post, it's the *lens*. The actual work (finding and fixing a root-cause data corruption bug, tuning language balance, chasing down why WER plateaued where it did) is real engineering, and I think it stands on its own regardless of who typed it. What's genuinely interesting is what that process looked like in practice: where it was rock-solid, where I had to catch its mistakes, and what a multi-day, multi-cloud, crash-and-recover ML project looks like when directed rather than hand-coded.
+I'm Olufemi Victor, a student at Carnegie Mellon University Africa in Kigali, Rwanda, originally from Nigeria. This was a solo entry, and I set myself a constraint on top of the competition's own rules: build the entire thing (data pipeline, training infrastructure across three different cloud providers, debugging, evaluation, error analysis) through natural-language direction to an AI coding agent (Claude Code), and never write or edit a line of code by hand myself.
 
 Final result: **0.47017** mean WER, 10th place.
 
@@ -38,7 +36,7 @@ That made me go check my own numbers. Our root-cause fix patched the *training* 
 277/9,962 Kikuyu dev rows (2.8%) still contain the raw, uncorrected mojibake sequence
 ```
 
-I did not catch this during the competition. It's a real gap, and I want to be honest about its actual impact rather than either hiding it or overstating it: since every one of my own checkpoints was evaluated against the *same* flawed 2.8%, the *relative* comparisons I made every model-selection decision on (which checkpoint beat which) are very likely still valid, since the corruption penalizes all candidates equally. But the *absolute* WER numbers I quoted throughout for Kikuyu, including the final 0.592 dev-set figure, are very slightly inflated (pessimistic), since correctly-reconstructed predictions were occasionally being compared against a reference that was still wrong.
+I did not catch this during the competition. Since every one of my own checkpoints was evaluated against the *same* flawed 2.8%, the *relative* comparisons I made every model-selection decision on (which checkpoint beat which) are very likely still valid, since the corruption penalizes all candidates equally. But the *absolute* WER numbers I quoted throughout for Kikuyu, including the final 0.592 dev-set figure, are very slightly inflated (pessimistic), since correctly-reconstructed predictions were occasionally being compared against a reference that was still wrong.
 
 Lesson: when you patch a bug, check *every* place the corrupted artifact could still be lurking, not just the one you were looking at. I fixed the training text and declared victory; I never re-checked the evaluation harness sitting right next to it.
 
@@ -62,7 +60,7 @@ That's backwards. `beta=1` means fully proportional to natural data volume (whic
 
 ## Finding #5: two honest negative results
 
-Not everything I tried worked, and I think that's worth stating plainly rather than only listing what did:
+Not everything I tried worked:
 
 - **Checkpoint averaging** (averaging the weights of the last 3 checkpoints, a standard technique, not ensembling, since it produces a single set of weights with the same inference cost as any other checkpoint): essentially a wash (0.4932 vs. 0.4924 dev WER for the single best checkpoint), likely because checkpoints only 1,000-2,000 steps apart, late in the same decay, are too correlated to give real noise-cancellation benefit.
 - **Pushing `beta_language` further, from 0.2 to 0.1**: made things *slightly worse* across the board, including the two languages I was specifically trying to help. Best guess: 0.2 was already close to the useful optimum for this data, and the extra correction started trading away useful Swahili/Kikuyu signal for a benefit that didn't materialize, possibly also because the follow-up training run was too short (3,000 steps) for a fresh cycle to show its full effect.
@@ -90,7 +88,7 @@ Real, but modest: nowhere close to explaining the gap to the leaderboard leader 
 
 ## What directing an AI agent was actually like for this
 
-Since that was the constraint I set myself, a genuine assessment, not a sales pitch:
+Since that was the constraint I set myself:
 
 **Where it held up well:** systematic, patient debugging across dozens of distinct failure modes over several days (encoding bugs, OOM tuning, a crashed training run mid-anneal, SSL/network issues, self-referential process-matching bugs); disciplined "verify before deciding" habits (checkpoint decisions were always made against measured dev-set WER, never assumed); catching its own mistakes when explicitly asked to check rather than just report (the `beta_language` direction, the dev-reference-corruption gap above, were both found by going back and checking, not by getting it right the first time).
 
