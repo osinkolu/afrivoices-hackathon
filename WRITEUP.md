@@ -17,7 +17,7 @@ Weights: [huggingface.co/Professor/afrivoices-ctc1b-checkpoints](https://hugging
 
 ## Finding #1: the mojibake bug (the single biggest lever)
 
-This started from a throwaway observation, not a deliberate audit: I saw someone's unrelated Omnilingual ASR inference code online handling a stray Unicode character (`⁇`, U+2047) in model output, and asked whether that might explain something odd I'd noticed in our own predictions. It did.
+This started from a throwaway observation, not a deliberate audit: I saw someone's unrelated Omnilingual ASR inference code online handling a stray Unicode character (`⁇`, U+2047) in model output, and asked whether that might explain something odd I'd noticed in my own predictions. It did.
 
 A chunk of the Kikuyu (dominant), Luo, and Somali training text had been double-encoded upstream: UTF-8 bytes for diacritics like `ĩ`/`ũ`/`Ĩ`/`Ũ` had been misread as Latin-1/CP1252 somewhere in the data pipeline, producing two-character garbage sequences (`Ä©`, `Å©`, `Ä¨`, `Å¨`) that the ASR tokenizer has no vocabulary entry for. The tokenizer's only option is to emit `<unk>`, and a CTC model trained on that target learns to reproduce exactly what it was shown, `<unk>` and all, at inference time.
 
@@ -30,7 +30,7 @@ The fix went through two stages:
 
 After the competition closed, I read the winning team's excellent writeup (worth reading in full) and noticed they'd caught something I hadn't: *"the provided Kikuyu dev was mojibake-corrupted and would have selected the best corruption-writer"*, meaning they fixed their dev-set **reference** text too, not just the training text.
 
-That made me go check my own numbers. Our root-cause fix patched the *training* data loader, but our `evaluate.py` script reads dev-set reference text directly from the raw parquet files, completely bypassing that patch. So I pulled a fresh copy of the dev data and checked, byte by byte:
+That made me go check my own numbers. The root-cause fix patched the *training* data loader, but the `evaluate.py` script reads dev-set reference text directly from the raw parquet files, completely bypassing that patch. So I pulled a fresh copy of the dev data and checked, byte by byte:
 
 ```
 277/9,962 Kikuyu dev rows (2.8%) still contain the raw, uncorrected mojibake sequence
@@ -54,9 +54,9 @@ Going from 2,000 to 6,000 steps within the *same* short-restart pattern gave alm
 
 ## Finding #4: the direction-of-a-formula bug
 
-The mixture sampler weights each language by `weight = (hours/total_hours)^beta`. I wanted to push more training exposure toward our two weakest languages (Kalenjin, Maasai), and my first instinct (confidently stated, in my own working notes) was "increase beta toward 1.0 to upweight low-resource languages."
+The mixture sampler weights each language by `weight = (hours/total_hours)^beta`. I wanted to push more training exposure toward the two weakest languages (Kalenjin, Maasai), and my first instinct (confidently stated, in my own working notes) was "increase beta toward 1.0 to upweight low-resource languages."
 
-That's backwards. `beta=1` means fully proportional to natural data volume (which *favors* Swahili, our highest-resource language); `beta` approaching `0` means fully equal weighting regardless of volume. I caught this specifically because I'd made a habit of verifying claims against the actual library source before acting on them, rather than trusting my own restated understanding, in this case by reading `mixture_parquet_storage.py`'s actual weight computation directly. Lowering beta from 0.5 to 0.2 (the correct direction) measurably helped Kalenjin and Maasai without hurting anyone else: every one of the 6 languages improved simultaneously at that setting.
+That's backwards. `beta=1` means fully proportional to natural data volume (which *favors* Swahili, the highest-resource language); `beta` approaching `0` means fully equal weighting regardless of volume. I caught this specifically because I'd made a habit of verifying claims against the actual library source before acting on them, rather than trusting my own restated understanding, in this case by reading `mixture_parquet_storage.py`'s actual weight computation directly. Lowering beta from 0.5 to 0.2 (the correct direction) measurably helped Kalenjin and Maasai without hurting anyone else: every one of the 6 languages improved simultaneously at that setting.
 
 ## Finding #5: two honest negative results
 
